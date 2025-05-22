@@ -28,5 +28,6 @@ router.get('/activity-categories', controller.getActivityCategories);
 // Time off (days off and user metadata)
 router.get('/daysoff', controller.getUserDaysoff);
 router.get('/users-overview', controller.getUsersOverview);
+router.get('/users-overview-project-timelogs', controller.getUserProjectTimeLogs);
 
 module.exports = router;

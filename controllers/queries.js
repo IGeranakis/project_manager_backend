@@ -228,6 +228,29 @@ const getUsersOverview = async (req, res) => {
   }
 };
 
+const getUserProjectTimeLogs = async (req, res) => {
+  const { alias, project } = req.query;
+
+  if (!alias || !project) {
+    return res.status(400).json({ error: 'Missing alias or project name' });
+  }
+
+  try {
+    const [results] = await db.execute(`
+      SELECT kimai2_users.alias, kimai2_projects.name, kimai2_timesheet.start_time, kimai2_timesheet.duration
+      FROM kimai2_timesheet
+      INNER JOIN kimai2_users ON kimai2_users.id = kimai2_timesheet.user
+      INNER JOIN kimai2_projects ON kimai2_projects.id = kimai2_timesheet.project_id
+      WHERE kimai2_users.alias = ? AND kimai2_projects.name = ?
+    `, [alias, project]);
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error("Error fetching project time logs:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   getTeamProjectsSummary,
   getProjectTeamUserStats,
@@ -237,5 +260,6 @@ module.exports = {
   getUsers,
   getActivityCategories,
   getUserDaysoff,
+  getUserProjectTimeLogs,
   getUsersOverview
 };
