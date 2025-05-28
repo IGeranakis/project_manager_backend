@@ -30,4 +30,17 @@ router.get('/daysoff', controller.getUserDaysoff);
 router.get('/users-overview', controller.getUsersOverview);
 router.get('/users-overview-project-timelogs', controller.getUserProjectTimeLogs);
 
+//project overview: name duration allias enabled
+router.get('/projects-overview',controller.getProjectsOverviewByDateAndStatus);
+
+router.get('/timesheets/total-logged-hours', controller.getTotalLoggedHours);
+router.get('/timesheets/previous-logged-hours', controller.getPreviousPeriodLoggedHours);
+router.get('/timesheets/project-duration', controller.getAllProjectDurationsInPeriod);
+router.get('/timesheets/user-project-hours', controller.getUserProjectDurationsInPeriod);
+router.get('/timesheets/user-submission-frequency', controller.getUserSubmissionFrequency);
+
+router.get('/timesheets/project-users-hours', controller.getUsersForProjectWithHours);
+
+
+
 module.exports = router;
