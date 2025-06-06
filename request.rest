@@ -1,0 +1,34 @@
+#######
+### Update hourly rate for a user
+PATCH http://localhost:5000/users/update-hourly-rate
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "hourly_rate": 45.5
+}
+
+###########
+### Get Project Users Hourly Costs
+GET http://localhost:5000/project-users-hourly-costs?projectName=Cash%20Flow%20Project&startdate=2024-01-01&enddate=2025-05-29
+Content-Type: application/json
+
+
+#############
+GET http://localhost:5000/timesheets/project-total-cost?projectName=Cash%20Flow%20Project&startdate=2024-12-01&enddate=2025-12-01
+
+
+
+#############
+GET http://localhost:5000/projects/budget?projectName=GBV Cyclades
+
+#############
+GET http://localhost:5000/project-users-monthly-costs?projectName=Funding Cancer 2024&year=2025
+
+
+
+#############
+GET http://localhost:5000/project-users-monthly-hours?projectName=Funding Cancer 2024&year=2025
+
+#########
+GET http://localhost:5000/summary?startdate=2022-01-01&enddate=2025-05-01&filter=inactive
