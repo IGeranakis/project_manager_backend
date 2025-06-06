@@ -52,9 +52,7 @@ router.get('/timesheets/project-total-cost', controller.getTotalProjectCost);
 router.get('/projects/budget', controller.getProjectBudget);
 router.get('/project-users-monthly-costs', controller.getMonthlyCostsPerUser);
 router.get('/project-users-monthly-hours', controller.getProjectUsersMonthlyHours);
-
-
-
+router.get('/stack-bar', controller.getProjectManagersWithProjects)
 
 
 module.exports = router;

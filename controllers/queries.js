@@ -960,6 +960,57 @@ const getProjectUsersMonthlyHours = async (req, res) => {
   }
 };
 
+const getProjectManagersWithProjects = async (req, res) => {
+  const { startdate, enddate, filter } = req.query;
+
+  if (!startdate || !enddate || !filter) {
+    return res.status(400).json({ error: 'Missing startdate, enddate or filter' });
+  }
+
+  const filterMap = {
+    Active: 1,
+    Inactive: 0,
+    Total: 'All',
+  };
+  const selectedFilterValue = filterMap[filter] ?? 'All';
+
+  try {
+    const baseQuery = `
+      SELECT 
+        u.alias AS username,
+        p.name AS project_name,
+        SUM(t.duration) / 3600 AS total_hours
+      FROM kimai2_users_teams ut
+      INNER JOIN kimai2_users u ON ut.user_id = u.id
+      INNER JOIN kimai2_teams tm ON ut.team_id = tm.id
+      INNER JOIN kimai2_projects_teams pt ON pt.team_id = tm.id
+      INNER JOIN kimai2_projects p ON pt.project_id = p.id
+      INNER JOIN kimai2_timesheet t ON t.project_id = p.id
+      WHERE ut.teamlead = 1
+        AND DATE(t.start_time) >= ?
+        AND DATE(t.end_time) <= ?
+        ${selectedFilterValue !== 'All' ? 'AND p.visible = ?' : ''}
+      GROUP BY u.alias, p.name
+      ORDER BY u.alias, p.name
+    `;
+
+    const params = [startdate, enddate];
+    if (selectedFilterValue !== 'All') {
+      params.push(selectedFilterValue);
+    }
+
+    const [results] = await db.execute(baseQuery, params);
+    res.status(200).json(results);
+
+  } catch (error) {
+    console.error("Error fetching project manager project summary:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
+
+
 
 
 
@@ -992,5 +1043,6 @@ module.exports = {
   getTotalProjectCost,
   getProjectBudget,
   getMonthlyCostsPerUser,
-  getProjectUsersMonthlyHours 
+  getProjectUsersMonthlyHours, 
+  getProjectManagersWithProjects 
 };
