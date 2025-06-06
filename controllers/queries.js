@@ -2,38 +2,120 @@ const db = require("../config/db")
 
 // Controller to get team project summaries
 const getTeamProjectsSummary = async (req, res) => {
-  try {
-    const [results] = await db.execute(`
-      SELECT kimai2_teams.name AS team_name,
-             kimai2_users_teams.user_id,
-             kimai2_users_teams.team_id,
-             kimai2_users_teams.teamlead,
-             kimai2_projects_teams.project_id,
-             kimai2_users.alias AS username,
-             kimai2_projects.name AS project_name,
-             kimai2_projects.visible AS active,
-             kimai2_projects.time_budget,
-             kimai2_projects.start AS start_date,
-             kimai2_projects.end AS end_date,
-             (
-               SELECT SUM(kimai2_timesheet.duration)
-               FROM kimai2_timesheet
-               WHERE kimai2_timesheet.project_id = kimai2_projects.id
-             ) AS duration
-      FROM kimai2_teams
-      INNER JOIN kimai2_users_teams ON kimai2_teams.id = kimai2_users_teams.team_id
-      INNER JOIN kimai2_projects_teams ON kimai2_projects_teams.team_id = kimai2_teams.id
-      INNER JOIN kimai2_users ON kimai2_users_teams.user_id = kimai2_users.id
-      INNER JOIN kimai2_projects ON kimai2_projects_teams.project_id = kimai2_projects.id
-      WHERE kimai2_users_teams.teamlead = 1
-    `);
+  const { startdate, enddate, filter } = req.query;
 
+  if (!startdate || !enddate || !filter) {
+    return res.status(400).json({ error: 'Missing startdate, enddate or filter' });
+  }
+
+  const filterMap = {
+    Active: 1,
+    Inactive: 0,
+    Total: 'All',
+  };
+
+  const selectedFilterValue = filterMap[filter] ?? 'All';
+
+  let query = `
+    SELECT 
+      kimai2_users.alias AS username,
+      kimai2_projects.name AS project_name,
+      SUM(kimai2_timesheet.duration) AS duration,
+      SUM((kimai2_timesheet.duration / 3600) * IFNULL(d.hourly_rate, 0)) AS budget,
+      kimai2_projects.visible
+    FROM kimai2_teams
+    INNER JOIN kimai2_users_teams 
+      ON kimai2_teams.id = kimai2_users_teams.team_id
+    INNER JOIN kimai2_projects_teams 
+      ON kimai2_projects_teams.team_id = kimai2_teams.id
+    INNER JOIN kimai2_users 
+      ON kimai2_users_teams.user_id = kimai2_users.id
+    INNER JOIN kimai2_projects 
+      ON kimai2_projects_teams.project_id = kimai2_projects.id
+    INNER JOIN kimai2_timesheet 
+      ON kimai2_timesheet.project_id = kimai2_projects.id 
+      AND kimai2_timesheet.user = kimai2_users.id
+    LEFT JOIN kimai2_daysoff d 
+      ON d.user_id = kimai2_users.id
+    WHERE kimai2_users_teams.teamlead = 1
+      AND DATE(kimai2_timesheet.start_time) >= ?
+      AND DATE(kimai2_timesheet.end_time) <= ?
+  `;
+
+  const params = [startdate, enddate];
+
+  if (selectedFilterValue !== 'All') {
+    query += ` AND kimai2_projects.visible = ?`;
+    params.push(selectedFilterValue);
+  }
+
+  query += `
+    GROUP BY kimai2_users.alias, kimai2_projects.name
+    ORDER BY kimai2_users.alias
+  `;
+
+  try {
+    const [results] = await db.execute(query, params);
     res.status(200).json(results);
   } catch (error) {
     console.error("Error fetching team project summary:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+
+
+const getUserDurationsForProject = async (req, res) => {
+  const { projectName, startdate, enddate, filter } = req.query;
+
+  if (!projectName || !startdate || !enddate || !filter) {
+    return res.status(400).json({ error: 'Missing required parameters' });
+  }
+
+  const filterMap = {
+    Active: 1,
+    Inactive: 0,
+    Total: 'All',
+  };
+
+  const selectedFilterValue = filterMap[filter] ?? 'All';
+
+  let query = `
+    SELECT 
+      u.alias AS username,
+      SUM(t.duration) / 3600 AS total_hours
+    FROM kimai2_timesheet t
+    INNER JOIN kimai2_users u ON t.user = u.id
+    INNER JOIN kimai2_projects p ON t.project_id = p.id
+    WHERE p.name = ?
+      AND DATE(t.start_time) >= ?
+      AND DATE(t.end_time) <= ?
+  `;
+
+  const params = [projectName, startdate, enddate];
+
+  if (selectedFilterValue !== 'All') {
+    query += ` AND p.visible = ?`;
+    params.push(selectedFilterValue);
+  }
+
+  query += `
+    GROUP BY u.alias
+    ORDER BY total_hours DESC
+  `;
+
+  try {
+    const [results] = await db.execute(query, params);
+    res.status(200).json(results);
+  } catch (error) {
+    console.error('Error fetching user durations for project:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+
+
+
 
 const getProjectTeamUserStats = async (req, res) => {
   const { projectId, teamId } = req.params;
@@ -195,24 +277,42 @@ const getUsersOverview = async (req, res) => {
 
   const selectedFilterValue = filterMap[filter] ?? 'All';
 
-  const baseQuery = `
+  // const baseQuery = `
+  //   SELECT kimai2_projects.name, kimai2_users.alias, kimai2_users.enabled,
+  //          SUM(kimai2_timesheet.duration) as duration,
+  //          MIN(kimai2_timesheet.start_time) as startime,
+  //          MAX(kimai2_timesheet.start_time) as lasttime,
+  //          kimai2_projects.visible,
+  //          kimai2_user_preferences.name as rate,
+  //          kimai2_user_preferences.value
+  //   FROM kimai2_timesheet
+  //   INNER JOIN kimai2_users ON kimai2_users.id = kimai2_timesheet.user
+  //   INNER JOIN kimai2_projects ON kimai2_projects.id = kimai2_timesheet.project_id
+  //   INNER JOIN kimai2_user_preferences ON kimai2_users.id = kimai2_user_preferences.user_id
+
+  //   WHERE DATE(start_time) >= ? AND DATE(start_time) <= ?
+  //     AND kimai2_user_preferences.name = 'hourly_rate'
+  //     ${selectedFilterValue !== 'All' ? 'AND kimai2_projects.visible = ?' : ''}
+  //   GROUP BY kimai2_users.alias, kimai2_projects.name, kimai2_projects.visible,
+  //            kimai2_user_preferences.name, kimai2_user_preferences.value, kimai2_users.enabled
+  // `;
+  const baseQuery=`
     SELECT kimai2_projects.name, kimai2_users.alias, kimai2_users.enabled,
            SUM(kimai2_timesheet.duration) as duration,
            MIN(kimai2_timesheet.start_time) as startime,
            MAX(kimai2_timesheet.start_time) as lasttime,
            kimai2_projects.visible,
-           kimai2_user_preferences.name as rate,
-           kimai2_user_preferences.value
+           kimai2_daysoff.hourly_rate as rate
     FROM kimai2_timesheet
     INNER JOIN kimai2_users ON kimai2_users.id = kimai2_timesheet.user
     INNER JOIN kimai2_projects ON kimai2_projects.id = kimai2_timesheet.project_id
-    INNER JOIN kimai2_user_preferences ON kimai2_users.id = kimai2_user_preferences.user_id
+    INNER JOIN kimai2_daysoff ON kimai2_daysoff.user_id=kimai2_users.id    
+
     WHERE DATE(start_time) >= ? AND DATE(start_time) <= ?
-      AND kimai2_user_preferences.name = 'hourly_rate'
-      ${selectedFilterValue !== 'All' ? 'AND kimai2_projects.visible = ?' : ''}
+    ${selectedFilterValue !== 'All' ? 'AND kimai2_projects.visible = ?' : ''}
     GROUP BY kimai2_users.alias, kimai2_projects.name, kimai2_projects.visible,
-             kimai2_user_preferences.name, kimai2_user_preferences.value, kimai2_users.enabled
-  `;
+             kimai2_daysoff.hourly_rate, kimai2_users.enabled
+  `
 
   const params = [startdate, enddate];
   if (selectedFilterValue !== 'All') {
@@ -568,10 +668,297 @@ const getUsersForProjectWithHours = async (req, res) => {
   }
 };
 
+const getTotalActiveUsers = async (req, res) => {
+  const { startdate, enddate } = req.query;
+
+  if (!startdate || !enddate) {
+    return res.status(400).json({ error: "startdate and enddate are required" });
+  }
+
+  try {
+    const [results] = await db.execute(`
+      SELECT COUNT(DISTINCT kimai2_users.id) AS total_active_users
+      FROM kimai2_users
+      INNER JOIN kimai2_timesheet ON kimai2_users.id = kimai2_timesheet.user
+      WHERE kimai2_users.enabled = 1
+        AND DATE(kimai2_timesheet.start_time) BETWEEN ? AND ?
+    `, [startdate, enddate]);
+
+    res.status(200).json({ total: results[0].total_active_users });
+  } catch (error) {
+    console.error("Error fetching total active users in period:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
+const getTotalActiveProjects = async (req, res) => {
+  const { startdate, enddate } = req.query;
+
+  if (!startdate || !enddate) {
+    return res.status(400).json({ error: "startdate and enddate are required" });
+  }
+
+  try {
+    const [results] = await db.execute(`
+      SELECT COUNT(DISTINCT kimai2_projects.id) AS total_active_projects
+      FROM kimai2_projects
+      INNER JOIN kimai2_timesheet ON kimai2_projects.id = kimai2_timesheet.project_id
+      WHERE kimai2_projects.visible = 1
+        AND DATE(kimai2_timesheet.start_time) BETWEEN ? AND ?
+    `, [startdate, enddate]);
+
+    res.status(200).json({ total: results[0].total_active_projects });
+  } catch (error) {
+    console.error("Error fetching total active projects in period:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const getTotalUsersInProject = async (req, res) => {
+  const { projectName, startdate, enddate } = req.query;
+
+  if (!projectName || !startdate || !enddate) {
+    return res.status(400).json({ error: "projectName, startdate, and enddate are required" });
+  }
+
+  try {
+    const [results] = await db.execute(`
+      SELECT COUNT(DISTINCT kimai2_users.id) AS total_users
+      FROM kimai2_timesheet
+      INNER JOIN kimai2_users ON kimai2_timesheet.user = kimai2_users.id
+      INNER JOIN kimai2_projects ON kimai2_timesheet.project_id = kimai2_projects.id
+      WHERE kimai2_projects.name = ?
+        AND DATE(kimai2_timesheet.start_time) BETWEEN ? AND ?
+    `, [projectName, startdate, enddate]);
+
+    res.status(200).json({ total_users: results[0].total_users });
+  } catch (error) {
+    console.error("Error fetching total users for project:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const getDayoffUsersWithRate = async (req, res) => {
+  try {
+    const [results] = await db.execute(`
+      SELECT 
+        d.user_id,
+        u.alias AS username,
+        d.hourly_rate
+      FROM kimai2_daysoff d
+      JOIN kimai2_users u ON d.user_id = u.id
+    `);
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error("Error fetching dayoff users and hourly rates:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const updateKimaiDaysOff = async(req,res) =>
+{
+  const { userId, hourly_rate } = req.body;
+
+  if (!userId || hourly_rate === undefined) {
+    return res.status(400).json({ error: 'Missing user_Id or hourly_rate' });
+  }
+
+  try {
+    await db.query(
+      'UPDATE kimai2_daysoff SET hourly_rate = ? WHERE user_id = ?',
+      [hourly_rate, userId]
+    );
+    res.json({ message: 'Hourly rate updated successfully' });
+  } catch (err) {
+    console.error('Update error:', err);
+    res.status(500).json({ error: 'Database update failed' });
+  }
+}
+
+const getProjectUsersWithHourlyRate = async (req, res) => {
+  const { projectName, startdate, enddate } = req.query;
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT 
+         u.alias AS username,
+         SUM(t.duration) AS total_duration,
+         d.hourly_rate
+       FROM kimai2_timesheet t
+       JOIN kimai2_users u ON t.user = u.id
+       JOIN kimai2_projects p ON t.project_id = p.id
+       LEFT JOIN kimai2_daysoff d ON d.user_id = u.id
+       WHERE p.name = ? AND t.start_time BETWEEN ? AND ?
+       GROUP BY u.id`,
+      [projectName, startdate, enddate]
+    );
+
+    const result = rows.map(row => ({
+      username: row.username,
+      hours: row.total_duration / 3600,
+      hourly_rate: parseFloat(row.hourly_rate || 0),
+      total_cost: (row.total_duration / 3600) * parseFloat(row.hourly_rate || 0)
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
+// controller/timesheets.js
+
+const getTotalProjectCost = async (req, res) => {
+  const { projectName, startdate, enddate } = req.query;
+
+  if (!projectName || !startdate || !enddate) {
+    return res.status(400).json({ error: "Missing parameters" });
+  }
+
+  const query = `
+    SELECT 
+      SUM((t.duration / 3600) * IFNULL(d.hourly_rate, 0)) AS total_cost
+    FROM kimai2_timesheet t
+    JOIN kimai2_users u ON u.id = t.user
+    JOIN kimai2_projects p ON p.id = t.project_id
+    LEFT JOIN kimai2_daysoff d ON d.user_id = u.id
+    WHERE p.name = ? AND t.start_time BETWEEN ? AND ?
+  `;
+
+  try {
+    const [rows] = await db.execute(query, [projectName, startdate, enddate]);
+    const total = rows[0]?.total_cost ?? 0;
+
+    res.json(total);
+  } catch (error) {
+    console.error("Error calculating total project cost:", error);
+    res.status(500).json({ error: "Failed to calculate total project cost" });
+  }
+};
 
 
 
 
+const getProjectBudget = async (req, res) => {
+  const { projectName } = req.query;
+  try {
+    const [rows] = await db.execute(
+      `SELECT budget FROM kimai2_projects WHERE name = ?`,
+      [projectName]
+    );
+    if (rows.length > 0) {
+      res.json({ budget: rows[0].budget });
+    } else {
+      res.status(404).json({ error: "Project not found" });
+    }
+  } catch (err) {
+    console.error("Error fetching project budget:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+};
+
+
+
+
+const getMonthlyCostsPerUser = async (req, res) => {
+  const { projectName, year } = req.query;
+
+  if (!projectName || !year) {
+    return res.status(400).json({ error: "Missing projectName or year" });
+  }
+
+  try {
+    const [rows] = await db.execute(`
+      SELECT 
+        u.alias,
+        MONTH(t.start_time) AS month,
+        SUM(TIMESTAMPDIFF(SECOND, t.start_time, t.end_time)) / 3600 AS hours,
+        COALESCE(d.hourly_rate, 0) AS hourly_rate,
+        (SUM(TIMESTAMPDIFF(SECOND, t.start_time, t.end_time)) / 3600) * COALESCE(d.hourly_rate, 0) AS cost
+      FROM kimai2_timesheet t
+      JOIN kimai2_users u ON u.id = t.user
+      LEFT JOIN kimai2_daysoff d ON d.user_id = u.id
+      JOIN kimai2_projects p ON p.id = t.project_id
+      WHERE p.name = ? AND YEAR(t.start_time) = ?
+      GROUP BY u.alias, month
+      ORDER BY u.alias, month
+    `, [projectName, year]);
+
+    // Organize data by user
+    const result = {};
+    for (let row of rows) {
+      const { alias, month, cost } = row;
+      if (!result[alias]) {
+        result[alias] = new Array(12).fill(0);
+      }
+      result[alias][month - 1] = cost;
+    }
+
+    const formatted = Object.entries(result).map(([alias, monthly_costs]) => ({
+      alias,
+      monthly_costs,
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error("Error fetching monthly user costs:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+};
+
+const getProjectUsersMonthlyHours = async (req, res) => {
+  const { projectName, year } = req.query;
+
+  if (!projectName || !year) {
+    return res.status(400).json({ error: 'Missing projectName or year' });
+  }
+
+  try {
+    const query = `
+      SELECT 
+        u.alias AS alias,
+        MONTH(t.start_time) AS month,
+        SUM(TIMESTAMPDIFF(SECOND, t.start_time, t.end_time)) / 3600 AS hours
+      FROM kimai2_timesheet t
+      JOIN kimai2_users u ON u.id = t.user
+      JOIN kimai2_projects p ON p.id = t.project_id
+      WHERE p.name = ?
+        AND YEAR(t.start_time) = ?
+      GROUP BY u.alias, month
+      ORDER BY u.alias, month;
+    `;
+
+    const [rows] = await db.query(query, [projectName, year]);
+
+    // Structure result: one row per user, array of 12 months
+    const userMap = {};
+
+    rows.forEach(row => {
+      const alias = row.alias;
+      const month = row.month;
+      const hours = parseFloat(row.hours);
+
+      if (!userMap[alias]) {
+        userMap[alias] = Array(12).fill(0);
+      }
+
+      userMap[alias][month - 1] = hours;
+    });
+
+    const result = Object.entries(userMap).map(([alias, monthly_hours]) => ({
+      alias,
+      monthly_hours
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching monthly hours:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
 
 
 
@@ -580,6 +967,7 @@ const getUsersForProjectWithHours = async (req, res) => {
 module.exports = {
   getTeamProjectsSummary,
   getProjectTeamUserStats,
+  getUserDurationsForProject,
   getUserDurations,
   getProjectUserHourlyRate,
   getProjectUserTimeLogs,
@@ -594,5 +982,15 @@ module.exports = {
   getAllProjectDurationsInPeriod,
   getUserProjectDurationsInPeriod,
   getUserSubmissionFrequency,
-  getUsersForProjectWithHours
+  getUsersForProjectWithHours,
+  getTotalActiveUsers,
+  getTotalActiveProjects,
+  getTotalUsersInProject,
+  getDayoffUsersWithRate,
+  updateKimaiDaysOff,
+  getProjectUsersWithHourlyRate,
+  getTotalProjectCost,
+  getProjectBudget,
+  getMonthlyCostsPerUser,
+  getProjectUsersMonthlyHours 
 };

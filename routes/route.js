@@ -6,7 +6,7 @@ const controller = require('../controllers/queries');
 
 // Team-level project summary
 router.get('/summary', controller.getTeamProjectsSummary);
-
+router.get('/user-project-hours',controller.getUserDurationsForProject);
 // Detailed stats for a specific project/team combination
 router.get('/project/:projectId/team/:teamId', controller.getProjectTeamUserStats);
 
@@ -40,6 +40,20 @@ router.get('/timesheets/user-project-hours', controller.getUserProjectDurationsI
 router.get('/timesheets/user-submission-frequency', controller.getUserSubmissionFrequency);
 
 router.get('/timesheets/project-users-hours', controller.getUsersForProjectWithHours);
+
+router.get('/users/active-count', controller.getTotalActiveUsers);
+router.get('/projects/active-count', controller.getTotalActiveProjects);
+router.get('/projects/total-users', controller.getTotalUsersInProject);
+router.get('/users/dayoff-hourly-rates', controller.getDayoffUsersWithRate);
+
+router.patch('/users/update-hourly-rate', controller.updateKimaiDaysOff)
+router.get('/project-users-hourly-costs', controller.getProjectUsersWithHourlyRate);
+router.get('/timesheets/project-total-cost', controller.getTotalProjectCost);
+router.get('/projects/budget', controller.getProjectBudget);
+router.get('/project-users-monthly-costs', controller.getMonthlyCostsPerUser);
+router.get('/project-users-monthly-hours', controller.getProjectUsersMonthlyHours);
+
+
 
 
 
