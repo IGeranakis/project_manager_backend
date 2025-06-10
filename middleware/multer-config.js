@@ -1,5 +1,5 @@
-import multer from 'multer';
-import path from 'path';
+const multer = require('multer');
+const path = require('path');
 
 // Define storage for multer
 const storage = multer.diskStorage({
@@ -23,8 +23,10 @@ const fileFilter = (req, file, cb) => {
 };
 
 // Middleware for handling image upload
-export const upload = multer({
+const upload = multer({
     storage: storage,
     limits: { fileSize: 1024 * 1024 * 5 },  // 5MB limit
     fileFilter: fileFilter
 });
+
+module.exports = upload.single('profileImage');  // Export the middleware for single file upload with field name 'profileImage'

@@ -1,9 +1,9 @@
-import User from "../models/userModel.js";
+
+User = require("../models/userModel.js");
 
 
 
-
-export const verifyUser = async (req,res,next)=>{
+const verifyUser = async (req,res,next)=>{
     if(!req.session.userId){
         return res.status(401).json({msg:"please log in to yourt account"});
     }
@@ -22,7 +22,7 @@ export const verifyUser = async (req,res,next)=>{
 
 
 
-export const adminOnly = async (req,res,next)=>{
+const adminOnly = async (req,res,next)=>{
    
     const user = await User.findOne({
         where:{
@@ -34,3 +34,8 @@ export const adminOnly = async (req,res,next)=>{
 
     next();
 }
+
+module.exports = {
+    verifyUser,
+    adminOnly
+};

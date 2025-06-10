@@ -33,11 +33,26 @@ GET http://localhost:5000/project-users-monthly-hours?projectName=Funding Cancer
 #########
 GET http://localhost:5000/summary?startdate=2022-01-01&enddate=2025-05-01&filter=inactive
 
-### //create Ypo
-POST http://localhost:5000/register
+### // Create a useradmin
+POST http://localhost:5000/users
 Content-Type: application/json
 
 {
-    "username": "admin",
-    "password": "123456"
+"name":"ilias",
+ "email":"admin3@gmail.com",
+ "password":"123456",
+ "confPassword":"123456",
+ "profileImage":null,
+ "role":"admin"
+}
+
+### 
+//Login user   
+POST http://localhost:5000/login
+Content-Type: application/json
+
+{
+    "email":"admin3@gmail.com",
+    "password":"123456"
+  
 }
