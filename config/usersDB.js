@@ -6,4 +6,9 @@ const usersDB = new Sequelize('project_management_users', 'root', '', {
   dialect: 'mysql',
 });
 
+// const usersDB = new Sequelize('insight_db', 'insight_user', '^xfij)QcJbi@', {
+//   host: '5.77.39.26',
+//   dialect: 'mysql',
+//   port:3306
+// });
 module.exports = usersDB;
